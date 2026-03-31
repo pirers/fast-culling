@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Burst editor screen — include/exclude frames, set keyframes, manage crops.
+///
+/// Edits are staged locally; they are committed to the provider only when the
+/// user taps **Save**.  Navigating back without saving discards all changes.
 class BurstEditorScreen extends ConsumerStatefulWidget {
   final String burstId;
   const BurstEditorScreen({super.key, required this.burstId});
@@ -15,13 +18,46 @@ class BurstEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _BurstEditorScreenState extends ConsumerState<BurstEditorScreen> {
+  /// Local working copy — mutations here do NOT touch provider state.
+  Burst? _localBurst;
+
+  @override
+  void initState() {
+    super.initState();
+    // One-time read to seed the local copy; changes are staged here until Save.
+    final source = ref
+        .read(burstProvider)
+        .bursts
+        .cast<Burst?>()
+        .firstWhere((b) => b?.id == widget.burstId, orElse: () => null);
+    if (source != null) {
+      _localBurst = Burst(
+        id: source.id,
+        aspectRatio: source.aspectRatio,
+        defaultFps: source.defaultFps,
+        defaultResolution: List<int>.from(source.defaultResolution),
+        frames: source.frames
+            .map((f) => BurstFrame(
+                  photo: f.photo,
+                  included: f.included,
+                  isKeyframe: f.isKeyframe,
+                  crop: f.crop,
+                ))
+            .toList(),
+      );
+    }
+  }
+
+  void _save() {
+    if (_localBurst != null) {
+      ref.read(burstProvider.notifier).updateBurst(_localBurst!);
+    }
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(burstProvider);
-    final burst = state.bursts.cast<Burst?>().firstWhere(
-          (b) => b?.id == widget.burstId,
-          orElse: () => null,
-        );
+    final burst = _localBurst;
 
     if (burst == null) {
       return AppScaffold(
@@ -34,13 +70,7 @@ class _BurstEditorScreenState extends ConsumerState<BurstEditorScreen> {
       appBar: AppBar(
         title: Text('Edit: ${burst.id}'),
         actions: [
-          AppButton(
-            label: 'Save',
-            onPressed: () {
-              ref.read(burstProvider.notifier).updateBurst(burst);
-              Navigator.of(context).pop();
-            },
-          ),
+          AppButton(label: 'Save', onPressed: _save),
           const SizedBox(width: 8),
         ],
       ),
@@ -64,7 +94,7 @@ class _BurstEditorScreenState extends ConsumerState<BurstEditorScreen> {
                         child: Text(ar.toLabel()),
                       ),
                   ],
-                  onChanged: (_) {},
+                  onChanged: (ar) => setState(() => burst.aspectRatio = ar),
                 ),
               ],
             ),

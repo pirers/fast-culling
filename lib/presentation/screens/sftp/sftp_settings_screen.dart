@@ -28,6 +28,8 @@ class _SftpSettingsScreenState extends ConsumerState<SftpSettingsScreen> {
     _hostCtrl = TextEditingController(text: config?.host ?? '');
     _portCtrl = TextEditingController(text: '${config?.port ?? 22}');
     _usernameCtrl = TextEditingController(text: config?.username ?? '');
+    // Password is intentionally left empty for security: the stored password
+    // is write-only and is never read back into the UI.
     _passwordCtrl = TextEditingController();
     _remoteDirCtrl =
         TextEditingController(text: config?.remoteDirectory ?? '/');
