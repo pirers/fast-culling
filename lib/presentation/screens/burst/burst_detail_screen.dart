@@ -1,22 +1,84 @@
+import 'dart:io';
+
 import 'package:fast_culling/domain/entities/burst.dart';
 import 'package:fast_culling/presentation/design_system/app_button.dart';
 import 'package:fast_culling/presentation/design_system/app_scaffold.dart';
 import 'package:fast_culling/presentation/providers/burst_provider.dart';
+import 'package:fast_culling/services/ffmpeg_service.dart';
+import 'package:fast_culling/services/ffmpeg_service_impl.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Detail view for a single burst — shows frame strip and basic info.
-class BurstDetailScreen extends ConsumerWidget {
+class BurstDetailScreen extends ConsumerStatefulWidget {
   final String burstId;
   const BurstDetailScreen({super.key, required this.burstId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BurstDetailScreen> createState() => _BurstDetailScreenState();
+}
+
+class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
+  bool _exporting = false;
+  ExportProgress? _exportProgress;
+
+  Future<void> _export(Burst burst) async {
+    // Capture messenger before any async gap to satisfy use_build_context_synchronously.
+    final messenger = ScaffoldMessenger.of(context);
+
+    final outputDir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose export folder',
+    );
+    if (!mounted || outputDir == null) return;
+
+    setState(() {
+      _exporting = true;
+      _exportProgress = null;
+    });
+
+    final service = const FfmpegServiceImpl();
+    final available = await service.isAvailable();
+    if (!mounted) return;
+
+    if (!available) {
+      setState(() => _exporting = false);
+      messenger.showSnackBar(
+        const SnackBar(
+            content: Text(
+                'FFmpeg not found on PATH. Install ffmpeg to export videos.')),
+      );
+      return;
+    }
+
+    final result = await service.exportBurst(
+      burst: burst,
+      outputDirectory: outputDir,
+      fps: burst.defaultFps,
+      resolution: burst.defaultResolution,
+      onProgress: (p) {
+        if (mounted) setState(() => _exportProgress = p);
+      },
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _exporting = false;
+      _exportProgress = null;
+    });
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(result.success
+            ? 'Exported to ${result.outputPath}'
+            : 'Export failed: ${result.error}'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(burstProvider);
-    final burst = state.bursts.cast<Burst?>().firstWhere(
-          (b) => b?.id == burstId,
-          orElse: () => null,
-        );
+    final burst = state.burstById(widget.burstId);
 
     if (burst == null) {
       return AppScaffold(
@@ -29,11 +91,38 @@ class BurstDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text('Burst: ${burst.id}'),
         actions: [
+          if (_exporting) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Center(
+                child: Text(
+                  _exportProgress != null
+                      ? 'Exporting… ${(_exportProgress!.fraction * 100).round()}%'
+                      : 'Exporting…',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ),
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 16),
+          ] else ...[
+            AppButton(
+              label: 'Export MP4',
+              onPressed: () => _export(burst),
+            ),
+            const SizedBox(width: 8),
+          ],
           AppButton(
             label: 'Edit',
             variant: AppButtonVariant.secondary,
-            onPressed: () => Navigator.of(context)
-                .pushNamed('/burst/editor', arguments: burst.id),
+            onPressed: _exporting
+                ? null
+                : () => Navigator.of(context)
+                    .pushNamed('/burst/editor', arguments: burst.id),
           ),
           const SizedBox(width: 8),
         ],
@@ -50,6 +139,10 @@ class BurstDetailScreen extends ConsumerWidget {
                   'FPS: ${burst.defaultFps}  |  '
                   'Resolution: ${burst.defaultResolution.join('×')}',
                 ),
+                if (burst.aspectRatio != null) ...[
+                  const SizedBox(width: 24),
+                  Text('Aspect: ${burst.aspectRatio!.toLabel()}'),
+                ],
               ],
             ),
           ),
@@ -89,13 +182,23 @@ class _FrameTile extends StatelessWidget {
         child: Column(
           children: [
             Expanded(
-              child: Container(
-                color: frame.included ? Colors.grey.shade200 : Colors.grey.shade400,
-                alignment: Alignment.center,
-                child: Icon(
-                  frame.included ? Icons.photo : Icons.photo_outlined,
-                  size: 40,
-                  color: Colors.grey,
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(3)),
+                child: Opacity(
+                  opacity: frame.included ? 1.0 : 0.45,
+                  child: Image.file(
+                    File(frame.photo.absolutePath),
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    cacheWidth: 320,
+                    errorBuilder: (ctx, e, st) => Container(
+                      color: Colors.grey.shade300,
+                      alignment: Alignment.center,
+                      child:
+                          const Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -105,6 +208,9 @@ class _FrameTile extends StatelessWidget {
                 children: [
                   Text('#${index + 1}',
                       style: Theme.of(context).textTheme.labelSmall),
+                  if (!frame.included)
+                    const Text('excluded',
+                        style: TextStyle(fontSize: 9, color: Colors.grey)),
                   if (frame.isKeyframe)
                     const Icon(Icons.star, size: 12, color: Colors.amber),
                 ],

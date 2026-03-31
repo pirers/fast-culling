@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fast_culling/domain/entities/burst.dart';
@@ -69,6 +70,41 @@ class BurstScreen extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(width: 16),
+          // Minimum-frames slider — bursts below this frame count are hidden.
+          Tooltip(
+            message:
+                'Minimum number of frames for a group to be shown as a burst.\n'
+                'Increase this to hide short sequences.',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.photo_library_outlined, size: 18),
+                const SizedBox(width: 4),
+                const Text('Min frames:'),
+                const SizedBox(width: 4),
+          // Min frames: 2–50 covers every practical burst size (2-frame panning
+          // shots up to 50-frame high-speed sequences).  Extend if needed.
+                SizedBox(
+                  width: 120,
+                  child: Slider(
+                    min: 2,
+                    max: 50,
+                    divisions: 48,
+                    value: state.minFrames.clamp(2, 50).toDouble(),
+                    label: '${state.minFrames}',
+                    onChanged: (v) {
+                      ref
+                          .read(burstProvider.notifier)
+                          .setMinFrames(v.round());
+                    },
+                  ),
+                ),
+                Text('${state.minFrames}',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
           const SizedBox(width: 8),
           AppButton(
             label: 'Detect Bursts',
@@ -101,14 +137,15 @@ class BurstScreen extends ConsumerWidget {
                   Text(
                     state.photos.isEmpty
                         ? 'Select a folder to begin.'
-                        : 'No bursts detected.\nTry increasing the gap slider above.',
+                        : 'No bursts detected.\nTry increasing the gap or decreasing the minimum frames.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   if (state.photos.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Current gap: ${(state.thresholdMs / 1000).round()} s  •  '
+                      'Gap: ${(state.thresholdMs / 1000).round()} s  •  '
+                      'Min frames: ${state.minFrames}  •  '
                       '${state.photos.length} photo(s) scanned',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
@@ -125,55 +162,101 @@ class BurstScreen extends ConsumerWidget {
               ),
               itemCount: state.bursts.length,
               itemBuilder: (context, i) =>
-                  _BurstCard(burst: state.bursts[i]),
+                  _AnimatedBurstCard(burst: state.bursts[i]),
             ),
     );
   }
 }
 
-class _BurstCard extends StatelessWidget {
+/// A burst card that animates through all frames in the burst at ~800 ms per frame.
+class _AnimatedBurstCard extends StatefulWidget {
   final Burst burst;
-  const _BurstCard({required this.burst});
+  const _AnimatedBurstCard({required this.burst});
 
   @override
-  Widget build(BuildContext context) => Card(
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () =>
-              Navigator.of(context).pushNamed('/burst/detail', arguments: burst.id),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ClipRect(
-                    child: Image.file(
-                      File(burst.frames.first.photo.absolutePath),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      cacheWidth: 480,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey.shade300,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.broken_image, size: 48),
-                      ),
+  State<_AnimatedBurstCard> createState() => _AnimatedBurstCardState();
+}
+
+class _AnimatedBurstCardState extends State<_AnimatedBurstCard> {
+  int _frameIndex = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedBurstCard old) {
+    super.didUpdateWidget(old);
+    if (old.burst.id != widget.burst.id ||
+        old.burst.frames.length != widget.burst.frames.length) {
+      _frameIndex = 0;
+      _timer?.cancel();
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    if (widget.burst.frames.length > 1) {
+      _timer = Timer.periodic(const Duration(milliseconds: 800), (_) {
+        if (mounted) {
+          setState(() =>
+              _frameIndex = (_frameIndex + 1) % widget.burst.frames.length);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final frame = widget.burst.frames[_frameIndex];
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.of(context)
+            .pushNamed('/burst/detail', arguments: widget.burst.id),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRect(
+                  child: Image.file(
+                    File(frame.photo.absolutePath),
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    cacheWidth: 480,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: Colors.grey.shade300,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.broken_image, size: 48),
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '${burst.frames.length} frames',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                Text(
-                  burst.id,
-                  style: Theme.of(context).textTheme.labelSmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${widget.burst.frames.length} frames',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              Text(
+                widget.burst.id,
+                style: Theme.of(context).textTheme.labelSmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }

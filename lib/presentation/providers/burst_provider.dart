@@ -13,6 +13,10 @@ class BurstState {
   final List<Photo> photos;
   final List<Burst> bursts;
   final int thresholdMs;
+
+  /// Minimum number of frames a group must contain to be surfaced as a burst.
+  final int minFrames;
+
   final bool isScanning;
   final bool isDetecting;
   final String? selectedRootDirectory;
@@ -22,6 +26,7 @@ class BurstState {
     this.photos = const [],
     this.bursts = const [],
     this.thresholdMs = 2000,
+    this.minFrames = 2,
     this.isScanning = false,
     this.isDetecting = false,
     this.selectedRootDirectory,
@@ -32,6 +37,7 @@ class BurstState {
     List<Photo>? photos,
     List<Burst>? bursts,
     int? thresholdMs,
+    int? minFrames,
     bool? isScanning,
     bool? isDetecting,
     String? selectedRootDirectory,
@@ -41,12 +47,21 @@ class BurstState {
         photos: photos ?? this.photos,
         bursts: bursts ?? this.bursts,
         thresholdMs: thresholdMs ?? this.thresholdMs,
+        minFrames: minFrames ?? this.minFrames,
         isScanning: isScanning ?? this.isScanning,
         isDetecting: isDetecting ?? this.isDetecting,
         selectedRootDirectory:
             selectedRootDirectory ?? this.selectedRootDirectory,
         selectedBurstId: selectedBurstId ?? this.selectedBurstId,
       );
+
+  /// Returns the [Burst] with the given [id], or `null` if not found.
+  Burst? burstById(String id) {
+    for (final b in bursts) {
+      if (b.id == id) return b;
+    }
+    return null;
+  }
 }
 
 /// Notifier for burst detection and editing.
@@ -86,6 +101,9 @@ class BurstNotifier extends StateNotifier<BurstState> {
     }
 
     state = state.copyWith(isScanning: false);
+    // Burst detection runs automatically after scanning so the user can see
+    // results immediately without having to click "Detect Bursts".
+    if (state.photos.isNotEmpty) detectBursts();
   }
 
   void setRootDirectory(String path) =>
@@ -98,6 +116,11 @@ class BurstNotifier extends StateNotifier<BurstState> {
     if (state.photos.isNotEmpty) detectBursts();
   }
 
+  void setMinFrames(int value) {
+    state = state.copyWith(minFrames: value);
+    if (state.photos.isNotEmpty) detectBursts();
+  }
+
   void setScanning(bool value) => state = state.copyWith(isScanning: value);
 
   void setPhotos(List<Photo> photos) => state = state.copyWith(photos: photos);
@@ -105,9 +128,9 @@ class BurstNotifier extends StateNotifier<BurstState> {
   void detectBursts() {
     state = state.copyWith(isDetecting: true);
     final allBursts = burst_detector.detectBursts(state.photos, state.thresholdMs);
-    // Only keep true bursts (≥ 2 frames). Single-frame groups are just
-    // regular photos that were not taken in burst mode.
-    final bursts = allBursts.where((b) => b.frames.length >= 2).toList();
+    // Filter by minimum frames threshold.
+    final bursts =
+        allBursts.where((b) => b.frames.length >= state.minFrames).toList();
     state = state.copyWith(bursts: bursts, isDetecting: false);
   }
 
