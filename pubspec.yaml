@@ -1,0 +1,35 @@
+name: fast_culling
+description: Flutter desktop photo workflow app — SFTP transfer and burst detection/editor.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+  exif: ^2.5.0
+  dartssh2: ^2.9.0
+  flutter_secure_storage: ^9.2.2
+  path_provider: ^2.1.3
+  file_picker: ^8.0.6
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+  crypto: ^3.0.3
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  riverpod_generator: ^2.4.0
+  freezed: ^2.5.2
+  json_serializable: ^6.8.0
+  build_runner: ^2.4.9
+  flutter_lints: ^3.0.2
+
+flutter:
+  uses-material-design: true
