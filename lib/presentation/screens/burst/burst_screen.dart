@@ -33,6 +33,25 @@ class BurstScreen extends ConsumerWidget {
                     }
                   },
           ),
+          const SizedBox(width: 16),
+          // Threshold slider — only meaningful once photos are loaded.
+          const Text('Threshold:'),
+          const SizedBox(width: 4),
+          SizedBox(
+            width: 160,
+            child: Slider(
+              min: 100,
+              max: 10000,
+              divisions: 99,
+              value: state.thresholdMs.toDouble(),
+              label: '${state.thresholdMs} ms',
+              onChanged: (v) {
+                ref.read(burstProvider.notifier).setThreshold(v.round());
+              },
+            ),
+          ),
+          Text('${state.thresholdMs} ms',
+              style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(width: 8),
           AppButton(
             label: 'Detect Bursts',

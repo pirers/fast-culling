@@ -91,7 +91,12 @@ class BurstNotifier extends StateNotifier<BurstState> {
   void setRootDirectory(String path) =>
       state = state.copyWith(selectedRootDirectory: path);
 
-  void setThreshold(int ms) => state = state.copyWith(thresholdMs: ms);
+  void setThreshold(int ms) {
+    state = state.copyWith(thresholdMs: ms);
+    // If photos are already loaded, re-run detection automatically so the
+    // user sees burst results update as they drag the slider.
+    if (state.photos.isNotEmpty) detectBursts();
+  }
 
   void setScanning(bool value) => state = state.copyWith(isScanning: value);
 
