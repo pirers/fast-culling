@@ -2,6 +2,7 @@ import 'package:fast_culling/domain/entities/burst.dart';
 import 'package:fast_culling/presentation/design_system/app_button.dart';
 import 'package:fast_culling/presentation/design_system/app_scaffold.dart';
 import 'package:fast_culling/presentation/providers/burst_provider.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,8 +23,14 @@ class BurstScreen extends ConsumerWidget {
             variant: AppButtonVariant.secondary,
             onPressed: state.isScanning
                 ? null
-                : () {
-                    // Folder picker wired in M1.
+                : () async {
+                    final path =
+                        await FilePicker.platform.getDirectoryPath();
+                    if (path != null) {
+                      ref
+                          .read(burstProvider.notifier)
+                          .scanDirectory(path);
+                    }
                   },
           ),
           const SizedBox(width: 8),
@@ -36,7 +43,18 @@ class BurstScreen extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: state.bursts.isEmpty
+      body: state.isScanning
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text('Scanning… ${state.photos.length} file(s) found'),
+                ],
+              ),
+            )
+          : state.bursts.isEmpty
           ? Center(
               child: Text(
                 state.photos.isEmpty

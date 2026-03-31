@@ -2,6 +2,10 @@ import 'package:fast_culling/domain/algorithms/burst_detector.dart'
     as burst_detector;
 import 'package:fast_culling/domain/entities/burst.dart';
 import 'package:fast_culling/domain/entities/photo.dart';
+import 'package:fast_culling/services/exif_service.dart';
+import 'package:fast_culling/services/exif_service_impl.dart';
+import 'package:fast_culling/services/filesystem_service.dart';
+import 'package:fast_culling/services/filesystem_service_impl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// State for the burst detection and editor module.
@@ -47,7 +51,42 @@ class BurstState {
 
 /// Notifier for burst detection and editing.
 class BurstNotifier extends StateNotifier<BurstState> {
-  BurstNotifier() : super(const BurstState());
+  final FilesystemService _filesystemService;
+  final ExifService _exifService;
+
+  BurstNotifier({
+    FilesystemService? filesystemService,
+    ExifService? exifService,
+  })  : _filesystemService =
+            filesystemService ?? const FilesystemServiceImpl(),
+        _exifService = exifService ?? const ExifServiceImpl(),
+        super(const BurstState());
+
+  /// Opens [rootPath], scans for JPEGs recursively, and enriches each file
+  /// with EXIF metadata.  Updates [BurstState.photos] incrementally so that
+  /// the UI can show progress.
+  Future<void> scanDirectory(String rootPath) async {
+    state = state.copyWith(
+      isScanning: true,
+      selectedRootDirectory: rootPath,
+      photos: [],
+      bursts: [],
+    );
+
+    final photos = <Photo>[];
+    await for (final bare
+        in _filesystemService.scanDirectory(rootPath)) {
+      final enriched = await _exifService.extractMetadata(
+        relativePath: bare.relativePath,
+        absolutePath: bare.absolutePath,
+      );
+      photos.add(enriched);
+      // Emit incremental updates so the UI can show progress.
+      state = state.copyWith(photos: List<Photo>.from(photos));
+    }
+
+    state = state.copyWith(isScanning: false);
+  }
 
   void setRootDirectory(String path) =>
       state = state.copyWith(selectedRootDirectory: path);
