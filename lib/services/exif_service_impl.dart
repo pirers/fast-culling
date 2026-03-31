@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:exif/exif.dart';
 import 'package:fast_culling/domain/entities/photo.dart';
 import 'package:fast_culling/services/exif_service.dart';
+import 'package:fast_culling/services/exif_timestamp_parser.dart';
 
 /// Concrete EXIF extraction using the `exif` package.
 class ExifServiceImpl implements ExifService {
@@ -23,12 +24,19 @@ class ExifServiceImpl implements ExifService {
       final bytes = await file.readAsBytes();
       final tags = await readExifFromBytes(bytes);
 
-      // Timestamp priority: DateTimeOriginal > DateTimeDigitized > DateTime
+      // Timestamp priority: DateTimeOriginal > DateTimeDigitized > DateTime.
       final rawTs = tags['EXIF DateTimeOriginal']?.printable ??
           tags['EXIF DateTimeDigitized']?.printable ??
           tags['Image DateTime']?.printable;
 
-      final timestamp = rawTs != null ? _parseExifDateTime(rawTs) : null;
+      // Sub-second fractional part — matches the same priority as above.
+      // Cameras store this in SubSecTimeOriginal (e.g. "123" → 123 ms).
+      final rawSubSec = tags['EXIF SubSecTimeOriginal']?.printable ??
+          tags['EXIF SubSecTimeDigitized']?.printable ??
+          tags['EXIF SubSecTime']?.printable;
+
+      final timestamp =
+          rawTs != null ? parseExifDateTime(rawTs, subSec: rawSubSec) : null;
 
       return Photo(
         relativePath: relativePath,
@@ -43,20 +51,6 @@ class ExifServiceImpl implements ExifService {
         absolutePath: absolutePath,
         fileSize: fileSize,
       );
-    }
-  }
-
-  /// Parses an EXIF datetime string `"yyyy:MM:dd HH:mm:ss"` to [DateTime].
-  DateTime? _parseExifDateTime(String raw) {
-    try {
-      final trimmed = raw.trim();
-      if (trimmed.length < 19) return null;
-      // Replace the date colons with dashes so DateTime.parse can handle it.
-      final iso =
-          '${trimmed.substring(0, 10).replaceAll(':', '-')}T${trimmed.substring(11)}';
-      return DateTime.parse(iso);
-    } catch (_) {
-      return null;
     }
   }
 }
