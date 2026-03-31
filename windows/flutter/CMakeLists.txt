@@ -50,6 +50,11 @@ foreach(source IN LISTS CPP_WRAPPER_SOURCES_AND_PLUGIN)
     "${WRAPPER_ROOT}/library_implementations/${source}")
 endforeach()
 
+# Mark wrapper sources as GENERATED so CMake does not check for their
+# existence at configure time; they are created by flutter assemble.
+set_source_files_properties(${CPP_WRAPPER_SOURCES_FULL}
+  PROPERTIES GENERATED TRUE)
+
 add_library(flutter_wrapper_app STATIC
   ${CPP_WRAPPER_SOURCES_FULL}
 )
