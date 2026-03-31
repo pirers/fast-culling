@@ -2,7 +2,7 @@ import 'package:fast_culling/domain/entities/burst.dart';
 import 'package:fast_culling/presentation/design_system/app_button.dart';
 import 'package:fast_culling/presentation/design_system/app_scaffold.dart';
 import 'package:fast_culling/presentation/providers/burst_provider.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide AspectRatio;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Burst editor screen — include/exclude frames, set keyframes, manage crops.
