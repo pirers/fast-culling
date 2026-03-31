@@ -21,7 +21,7 @@ class BurstState {
   const BurstState({
     this.photos = const [],
     this.bursts = const [],
-    this.thresholdMs = 500,
+    this.thresholdMs = 2000,
     this.isScanning = false,
     this.isDetecting = false,
     this.selectedRootDirectory,
@@ -104,7 +104,10 @@ class BurstNotifier extends StateNotifier<BurstState> {
 
   void detectBursts() {
     state = state.copyWith(isDetecting: true);
-    final bursts = burst_detector.detectBursts(state.photos, state.thresholdMs);
+    final allBursts = burst_detector.detectBursts(state.photos, state.thresholdMs);
+    // Only keep true bursts (≥ 2 frames). Single-frame groups are just
+    // regular photos that were not taken in burst mode.
+    final bursts = allBursts.where((b) => b.frames.length >= 2).toList();
     state = state.copyWith(bursts: bursts, isDetecting: false);
   }
 

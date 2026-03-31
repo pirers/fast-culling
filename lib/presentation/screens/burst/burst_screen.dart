@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:fast_culling/domain/entities/burst.dart';
 import 'package:fast_culling/presentation/design_system/app_button.dart';
 import 'package:fast_culling/presentation/design_system/app_scaffold.dart';
@@ -34,24 +36,39 @@ class BurstScreen extends ConsumerWidget {
                   },
           ),
           const SizedBox(width: 16),
-          // Threshold slider — only meaningful once photos are loaded.
-          const Text('Threshold:'),
-          const SizedBox(width: 4),
-          SizedBox(
-            width: 160,
-            child: Slider(
-              min: 100,
-              max: 10000,
-              divisions: 99,
-              value: state.thresholdMs.toDouble(),
-              label: '${state.thresholdMs} ms',
-              onChanged: (v) {
-                ref.read(burstProvider.notifier).setThreshold(v.round());
-              },
+          // Threshold slider — controls the maximum gap between consecutive
+          // shots that still counts as the same burst.
+          Tooltip(
+            message:
+                'Max time gap between consecutive shots to be grouped as one burst.\n'
+                'Increase this if your shots are spread over several seconds.',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.timer_outlined, size: 18),
+                const SizedBox(width: 4),
+                const Text('Gap:'),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 160,
+                  child: Slider(
+                    min: 1,
+                    max: 30,
+                    divisions: 29,
+                    value: (state.thresholdMs / 1000).clamp(1.0, 30.0),
+                    label: '${(state.thresholdMs / 1000).round()} s',
+                    onChanged: (v) {
+                      ref
+                          .read(burstProvider.notifier)
+                          .setThreshold((v * 1000).round());
+                    },
+                  ),
+                ),
+                Text('${(state.thresholdMs / 1000).round()} s',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
             ),
           ),
-          Text('${state.thresholdMs} ms',
-              style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(width: 8),
           AppButton(
             label: 'Detect Bursts',
@@ -75,10 +92,28 @@ class BurstScreen extends ConsumerWidget {
             )
           : state.bursts.isEmpty
           ? Center(
-              child: Text(
-                state.photos.isEmpty
-                    ? 'Select a folder to begin.'
-                    : 'No bursts detected. Try adjusting the threshold.',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.burst_mode,
+                      size: 64, color: Colors.black26),
+                  const SizedBox(height: 16),
+                  Text(
+                    state.photos.isEmpty
+                        ? 'Select a folder to begin.'
+                        : 'No bursts detected.\nTry increasing the gap slider above.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  if (state.photos.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Current gap: ${(state.thresholdMs / 1000).round()} s  •  '
+                      '${state.photos.length} photo(s) scanned',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
               ),
             )
           : GridView.builder(
@@ -112,10 +147,18 @@ class _BurstCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Container(
-                    color: Colors.grey.shade300,
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.burst_mode, size: 48),
+                  child: ClipRect(
+                    child: Image.file(
+                      File(burst.frames.first.photo.absolutePath),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      cacheWidth: 480,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey.shade300,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.broken_image, size: 48),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
