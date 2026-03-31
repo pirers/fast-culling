@@ -6,15 +6,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Burst editor screen — include/exclude frames, set keyframes, manage crops.
-class BurstEditorScreen extends ConsumerWidget {
+class BurstEditorScreen extends ConsumerStatefulWidget {
   final String burstId;
   const BurstEditorScreen({super.key, required this.burstId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BurstEditorScreen> createState() => _BurstEditorScreenState();
+}
+
+class _BurstEditorScreenState extends ConsumerState<BurstEditorScreen> {
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(burstProvider);
     final burst = state.bursts.cast<Burst?>().firstWhere(
-          (b) => b?.id == burstId,
+          (b) => b?.id == widget.burstId,
           orElse: () => null,
         );
 
@@ -68,8 +73,15 @@ class BurstEditorScreen extends ConsumerWidget {
           Expanded(
             child: ListView.builder(
               itemCount: burst.frames.length,
-              itemBuilder: (context, i) =>
-                  _EditorFrameTile(burst: burst, frameIndex: i),
+              itemBuilder: (context, i) => _EditorFrameTile(
+                frame: burst.frames[i],
+                onIncludedChanged: (value) {
+                  setState(() => burst.frames[i].included = value);
+                },
+                onKeyframeChanged: (value) {
+                  setState(() => burst.frames[i].isKeyframe = value);
+                },
+              ),
             ),
           ),
         ],
@@ -79,13 +91,18 @@ class BurstEditorScreen extends ConsumerWidget {
 }
 
 class _EditorFrameTile extends StatelessWidget {
-  final Burst burst;
-  final int frameIndex;
-  const _EditorFrameTile({required this.burst, required this.frameIndex});
+  final BurstFrame frame;
+  final ValueChanged<bool> onIncludedChanged;
+  final ValueChanged<bool> onKeyframeChanged;
+
+  const _EditorFrameTile({
+    required this.frame,
+    required this.onIncludedChanged,
+    required this.onKeyframeChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final frame = burst.frames[frameIndex];
     return ListTile(
       leading: Icon(
         frame.included ? Icons.photo : Icons.photo_outlined,
@@ -98,9 +115,7 @@ class _EditorFrameTile extends StatelessWidget {
         children: [
           Checkbox(
             value: frame.included,
-            onChanged: (_) {
-              frame.included = !frame.included;
-            },
+            onChanged: (v) => onIncludedChanged(v ?? frame.included),
           ),
           IconButton(
             icon: Icon(
@@ -108,9 +123,7 @@ class _EditorFrameTile extends StatelessWidget {
               color: frame.isKeyframe ? Colors.amber : null,
             ),
             tooltip: 'Toggle keyframe',
-            onPressed: () {
-              frame.isKeyframe = !frame.isKeyframe;
-            },
+            onPressed: () => onKeyframeChanged(!frame.isKeyframe),
           ),
         ],
       ),
