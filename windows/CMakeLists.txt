@@ -64,9 +64,11 @@ set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
 # Make the "install" step default to not running.
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY true)
 
-install(CODE "
-  file(REMOVE_RECURSE \"${INSTALL_BUNDLE_DATA_DIR}\")
-  " COMPONENT Runtime)
+if(INSTALL_BUNDLE_DATA_DIR)
+  install(CODE "
+    file(REMOVE_RECURSE \"${INSTALL_BUNDLE_DATA_DIR}\")
+    " COMPONENT Runtime)
+endif()
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
@@ -83,7 +85,8 @@ install(CODE "
   file(REMOVE_RECURSE \"${CMAKE_INSTALL_PREFIX}/${FLUTTER_ASSET_DIR_NAME}\")
   " COMPONENT Runtime)
 install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
-  DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime
+  OPTIONAL)
 
 # Install the AOT library on non-Debug builds only.
 install(FILES "${PROJECT_BUILD_DIR}/windows/runner/Release/app.so"
