@@ -4,15 +4,53 @@ import 'package:fast_culling/domain/entities/burst.dart';
 import 'package:fast_culling/services/ffmpeg_service.dart';
 import 'package:path/path.dart' as p;
 
-/// Concrete FFmpeg implementation that shells out to the `ffmpeg` binary
-/// found on the system PATH.
+/// Concrete FFmpeg implementation that shells out to the `ffmpeg` binary.
+///
+/// Binary lookup order:
+/// 1. **Bundled binary** — a file named `ffmpeg` (macOS/Linux) or `ffmpeg.exe`
+///    (Windows) placed next to the running executable.  On macOS this is inside
+///    `YourApp.app/Contents/MacOS/`.  On Windows it is in the same folder as
+///    `fast_culling.exe`.
+/// 2. **System PATH** — the `ffmpeg` command found via the operating system's
+///    PATH environment variable (useful for development/debug runs).
+///
+/// See the [README](../../README.MD) for instructions on placing the bundled
+/// binary inside the app bundle / installer directory.
 class FfmpegServiceImpl implements FfmpegService {
   const FfmpegServiceImpl();
+
+  // ── Binary resolution ──────────────────────────────────────────────────────
+
+  /// Returns the path to the ffmpeg binary to use:
+  /// the bundled copy if found, otherwise `'ffmpeg'` (relies on PATH).
+  static Future<String> _resolveFfmpegPath() async {
+    final binaryName = Platform.isWindows ? 'ffmpeg.exe' : 'ffmpeg';
+    final execDir = p.dirname(Platform.resolvedExecutable);
+
+    final candidates = <String>[
+      // Same directory as the running executable — works on both platforms and
+      // matches the simplest "drop it next to the .exe / inside .app/Contents/MacOS/" layout.
+      p.join(execDir, binaryName),
+      // macOS app bundle: Contents/Resources/ (one level up from Contents/MacOS/).
+      if (Platform.isMacOS)
+        p.normalize(p.join(execDir, '..', 'Resources', binaryName)),
+    ];
+
+    for (final candidate in candidates) {
+      if (await File(candidate).exists()) return candidate;
+    }
+
+    // Fall back to the system PATH.
+    return 'ffmpeg';
+  }
+
+  // ── FfmpegService ──────────────────────────────────────────────────────────
 
   @override
   Future<bool> isAvailable() async {
     try {
-      final result = await Process.run('ffmpeg', ['-version']);
+      final binary = await _resolveFfmpegPath();
+      final result = await Process.run(binary, ['-version']);
       return result.exitCode == 0;
     } catch (_) {
       return false;
@@ -22,7 +60,7 @@ class FfmpegServiceImpl implements FfmpegService {
   @override
   Future<ExportResult> exportBurst({
     required Burst burst,
-    required String outputDirectory,
+    required String outputPath,
     required int fps,
     required double imageDurationSeconds,
     required List<int> resolution,
@@ -56,7 +94,7 @@ class FfmpegServiceImpl implements FfmpegService {
       }
       await listFile.writeAsString(buf.toString());
 
-      final outputPath = p.join(outputDirectory, '${burst.id}.mp4');
+      final binary = await _resolveFfmpegPath();
 
       final args = [
         '-y',
@@ -73,7 +111,7 @@ class FfmpegServiceImpl implements FfmpegService {
         outputPath,
       ];
 
-      final process = await Process.start('ffmpeg', args);
+      final process = await Process.start(binary, args);
 
       process.stderr.listen((data) {
         if (isCancelled?.call() ?? false) {

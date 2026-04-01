@@ -20,6 +20,55 @@ It provides two core modules:
 
 ---
 
+## Bundling FFmpeg for MP4 export
+
+The burst export feature requires an [FFmpeg](https://ffmpeg.org/) binary.
+The app looks for it in the following order:
+
+1. **Bundled binary** (recommended) — a file named `ffmpeg` (macOS) or
+   `ffmpeg.exe` (Windows) placed **next to the running executable**.
+2. **System PATH** — any `ffmpeg` command accessible via the OS PATH
+   (useful during development).
+
+### macOS
+
+Download a static FFmpeg build for macOS (e.g., from
+[evermeet.cx](https://evermeet.cx/ffmpeg/) or `brew install ffmpeg`), then:
+
+```bash
+# After building the release app:
+cp /usr/local/bin/ffmpeg \
+   build/macos/Build/Products/Release/fast_culling.app/Contents/MacOS/ffmpeg
+chmod +x build/macos/Build/Products/Release/fast_culling.app/Contents/MacOS/ffmpeg
+```
+
+Or for a dev run, simply install FFmpeg system-wide and ensure it is on your PATH:
+
+```bash
+brew install ffmpeg
+```
+
+### Windows
+
+Download a static FFmpeg build for Windows from
+[gyan.dev](https://www.gyan.dev/ffmpeg/builds/) (choose the **release essentials**
+zip), then place `ffmpeg.exe` next to `fast_culling.exe`:
+
+```
+build\windows\x64\runner\Release\
+  fast_culling.exe
+  ffmpeg.exe          ← place here
+```
+
+During development you can also install FFmpeg via [winget](https://winget.run/pkg/Gyan/FFmpeg):
+
+```powershell
+winget install Gyan.FFmpeg
+# Restart your terminal so PATH is updated, then run the app.
+```
+
+---
+
 ## Getting started
 
 ```bash

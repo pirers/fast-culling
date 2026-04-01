@@ -28,7 +28,7 @@ abstract class FfmpegService {
 
   /// Exports [burst] to an MP4 file.
   ///
-  /// [outputDirectory] — directory for the output file.
+  /// [outputPath] — full path (including filename) for the output .mp4 file.
   /// [fps] — frames per second for the output video.
   /// [imageDurationSeconds] — how long each source photo is visible in the video.
   /// [resolution] — [width, height] of the output video.
@@ -36,7 +36,7 @@ abstract class FfmpegService {
   /// [isCancelled] — if returns true, export is cancelled and temp files cleaned.
   Future<ExportResult> exportBurst({
     required Burst burst,
-    required String outputDirectory,
+    required String outputPath,
     required int fps,
     required double imageDurationSeconds,
     required List<int> resolution,

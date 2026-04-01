@@ -31,11 +31,14 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
     final settings = await _showExportDialog(burst);
     if (settings == null || !mounted) return;
 
-    // ── Step 2: pick output folder ────────────────────────────────────────────
-    final outputDir = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Choose export folder',
+    // ── Step 2: pick output file path ─────────────────────────────────────────
+    final outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save burst as MP4',
+      fileName: '${burst.id}.mp4',
+      allowedExtensions: ['mp4'],
+      type: FileType.custom,
     );
-    if (!mounted || outputDir == null) return;
+    if (!mounted || outputPath == null) return;
 
     setState(() {
       _exporting = true;
@@ -51,8 +54,9 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
       setState(() => _exporting = false);
       messenger.showSnackBar(
         const SnackBar(
-            content: Text(
-                'FFmpeg not found on PATH. Install ffmpeg to export videos.')),
+            content: Text('FFmpeg not found. '
+                'Place the ffmpeg binary next to the app executable '
+                'or install it system-wide — see the README for details.')),
       );
       return;
     }
@@ -60,7 +64,7 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
     // ── Step 4: run export ────────────────────────────────────────────────────
     final result = await service.exportBurst(
       burst: burst,
-      outputDirectory: outputDir,
+      outputPath: outputPath,
       fps: settings.fps,
       imageDurationSeconds: settings.imageDurationSeconds,
       resolution: burst.defaultResolution,
@@ -166,7 +170,11 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
               ],
             ),
           ),
-          Expanded(
+          // Fixed-height strip so tiles don't stretch to fill the remaining
+          // screen height.  260 = 200 (image) + 8 (padding) + ~20 (labels)
+          // + 32 (breathing room).
+          SizedBox(
+            height: 260,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
