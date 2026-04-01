@@ -73,6 +73,7 @@ class _BurstEditorScreenState extends ConsumerState<BurstEditorScreen> {
       );
     }
 
+    final hasAnyCrop = burst.frames.any((f) => f.crop != null);
     final selectedFrame =
         _selectedFrameIndex != null ? burst.frames[_selectedFrameIndex!] : null;
 
@@ -89,17 +90,31 @@ class _BurstEditorScreenState extends ConsumerState<BurstEditorScreen> {
                 const SizedBox(width: 8),
                 DropdownButton<AspectRatio?>(
                   value: burst.aspectRatio,
-                  items: [
-                    const DropdownMenuItem(
-                        value: null, child: Text('— none —')),
-                    for (final ar in AspectRatio.values)
-                      DropdownMenuItem(
-                        value: ar,
-                        child: Text(ar.toLabel()),
-                      ),
-                  ],
-                  onChanged: (ar) => setState(() => burst.aspectRatio = ar),
+                  // Disabled once a keyframe crop is defined — ratio is then fixed.
+                  items: hasAnyCrop
+                      ? null
+                      : [
+                          const DropdownMenuItem(
+                              value: null, child: Text('— none —')),
+                          for (final ar in AspectRatio.values)
+                            DropdownMenuItem(
+                              value: ar,
+                              child: Text(ar.toLabel()),
+                            ),
+                        ],
+                  onChanged: hasAnyCrop
+                      ? null
+                      : (ar) => setState(() => burst.aspectRatio = ar),
                 ),
+                if (hasAnyCrop && burst.aspectRatio != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Chip(
+                      label: Text(burst.aspectRatio!.toLabel()),
+                      avatar: const Icon(Icons.lock_outline, size: 14),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -352,6 +367,18 @@ class _CropEditorPanelState extends State<_CropEditorPanel> {
     }
   }
 
+  /// Snaps [crop] to [ar] by adjusting height from the current width,
+  /// keeping the crop centre stable.
+  CropRect _snapToAspectRatio(CropRect crop, AspectRatio ar) {
+    if (_image == null) return _defaultCropForAspectRatio(ar);
+    final arValue = _arValue(ar);
+    final newH =
+        (crop.w * _image!.width / (_image!.height * arValue)).clamp(0.0, 1.0);
+    final cy = crop.y + crop.h / 2;
+    final newY = (cy - newH / 2).clamp(0.0, 1.0 - newH);
+    return CropRect(x: crop.x, y: newY, w: crop.w, h: newH);
+  }
+
   double _arValue(AspectRatio ar) {
     switch (ar) {
       case AspectRatio.ratio1x1:
@@ -404,19 +431,6 @@ class _CropEditorPanelState extends State<_CropEditorPanel> {
         c.h * _imageRect.height,
       );
 
-  /// Converts a widget-local pixel [Rect] back to normalised [CropRect].
-  CropRect _pixelsToCrop(Rect r) {
-    if (_imageRect.width == 0 || _imageRect.height == 0) {
-      return const CropRect(x: 0, y: 0, w: 1, h: 1);
-    }
-    return CropRect(
-      x: ((r.left - _imageRect.left) / _imageRect.width).clamp(0.0, 1.0),
-      y: ((r.top - _imageRect.top) / _imageRect.height).clamp(0.0, 1.0),
-      w: (r.width / _imageRect.width).clamp(0.0, 1.0),
-      h: (r.height / _imageRect.height).clamp(0.0, 1.0),
-    );
-  }
-
   _DragTarget _hitTest(Offset point, Rect cropPx) {
     bool near(Offset a) => (point - a).distance <= _handleHitRadius;
     if (near(cropPx.topLeft)) return _DragTarget.topLeft;
@@ -448,6 +462,18 @@ class _CropEditorPanelState extends State<_CropEditorPanel> {
     final s = _cropAtDragStart!;
     const minSize = 0.05;
 
+    // When an aspect ratio is locked, corner drags maintain the ratio.
+    // The ratio in normalised coordinates: h_norm = w_norm * imgW / (imgH * arValue)
+    final ar = widget.targetAspectRatio != null && _image != null
+        ? _arValue(widget.targetAspectRatio!)
+        : null;
+
+    // Helper: given normalised width, return the matching normalised height.
+    double constrainedH(double w) {
+      if (ar == null || _image == null) return w;
+      return w * _image!.width / (_image!.height * ar);
+    }
+
     final CropRect updated;
     switch (_dragTarget) {
       case _DragTarget.move:
@@ -458,37 +484,69 @@ class _CropEditorPanelState extends State<_CropEditorPanel> {
           h: s.h,
         );
       case _DragTarget.topLeft:
-        final newX = (s.x + dx).clamp(0.0, s.x + s.w - minSize);
-        final newY = (s.y + dy).clamp(0.0, s.y + s.h - minSize);
-        updated = CropRect(
-          x: newX,
-          y: newY,
-          w: s.w - (newX - s.x),
-          h: s.h - (newY - s.y),
-        );
+        if (ar != null) {
+          // Right and bottom fixed; width drives height.
+          final newX = (s.x + dx).clamp(0.0, s.x + s.w - minSize);
+          final newW = (s.x + s.w - newX).clamp(minSize, 1.0);
+          final newH = constrainedH(newW).clamp(minSize, 1.0);
+          final newY = (s.y + s.h - newH).clamp(0.0, 1.0);
+          updated = CropRect(x: newX, y: newY, w: newW, h: newH);
+        } else {
+          final newX = (s.x + dx).clamp(0.0, s.x + s.w - minSize);
+          final newY = (s.y + dy).clamp(0.0, s.y + s.h - minSize);
+          updated = CropRect(
+            x: newX,
+            y: newY,
+            w: s.w - (newX - s.x),
+            h: s.h - (newY - s.y),
+          );
+        }
       case _DragTarget.topRight:
-        final newY = (s.y + dy).clamp(0.0, s.y + s.h - minSize);
-        updated = CropRect(
-          x: s.x,
-          y: newY,
-          w: (s.w + dx).clamp(minSize, 1.0 - s.x),
-          h: s.h - (newY - s.y),
-        );
+        if (ar != null) {
+          // Left and bottom fixed; width drives height.
+          final newW = (s.w + dx).clamp(minSize, 1.0 - s.x);
+          final newH = constrainedH(newW).clamp(minSize, 1.0);
+          final newY = (s.y + s.h - newH).clamp(0.0, 1.0);
+          updated = CropRect(x: s.x, y: newY, w: newW, h: newH);
+        } else {
+          final newY = (s.y + dy).clamp(0.0, s.y + s.h - minSize);
+          updated = CropRect(
+            x: s.x,
+            y: newY,
+            w: (s.w + dx).clamp(minSize, 1.0 - s.x),
+            h: s.h - (newY - s.y),
+          );
+        }
       case _DragTarget.bottomLeft:
-        final newX = (s.x + dx).clamp(0.0, s.x + s.w - minSize);
-        updated = CropRect(
-          x: newX,
-          y: s.y,
-          w: s.w - (newX - s.x),
-          h: (s.h + dy).clamp(minSize, 1.0 - s.y),
-        );
+        if (ar != null) {
+          // Right and top fixed; width drives height.
+          final newX = (s.x + dx).clamp(0.0, s.x + s.w - minSize);
+          final newW = (s.x + s.w - newX).clamp(minSize, 1.0);
+          final newH = constrainedH(newW).clamp(minSize, 1.0 - s.y);
+          updated = CropRect(x: newX, y: s.y, w: newW, h: newH);
+        } else {
+          final newX = (s.x + dx).clamp(0.0, s.x + s.w - minSize);
+          updated = CropRect(
+            x: newX,
+            y: s.y,
+            w: s.w - (newX - s.x),
+            h: (s.h + dy).clamp(minSize, 1.0 - s.y),
+          );
+        }
       case _DragTarget.bottomRight:
-        updated = CropRect(
-          x: s.x,
-          y: s.y,
-          w: (s.w + dx).clamp(minSize, 1.0 - s.x),
-          h: (s.h + dy).clamp(minSize, 1.0 - s.y),
-        );
+        if (ar != null) {
+          // Left and top fixed; width drives height.
+          final newW = (s.w + dx).clamp(minSize, 1.0 - s.x);
+          final newH = constrainedH(newW).clamp(minSize, 1.0 - s.y);
+          updated = CropRect(x: s.x, y: s.y, w: newW, h: newH);
+        } else {
+          updated = CropRect(
+            x: s.x,
+            y: s.y,
+            w: (s.w + dx).clamp(minSize, 1.0 - s.x),
+            h: (s.h + dy).clamp(minSize, 1.0 - s.y),
+          );
+        }
       case _DragTarget.none:
         return;
     }
@@ -532,10 +590,13 @@ class _CropEditorPanelState extends State<_CropEditorPanel> {
                 TextButton.icon(
                   icon: const Icon(Icons.aspect_ratio, size: 16),
                   label: Text(
-                      'Apply ${widget.targetAspectRatio!.toLabel()}'),
+                      'Snap to ${widget.targetAspectRatio!.toLabel()}'),
                   onPressed: () {
-                    final c =
-                        _defaultCropForAspectRatio(widget.targetAspectRatio!);
+                    // Snap current crop to the locked aspect ratio,
+                    // maintaining the crop centre.
+                    final c = _snapToAspectRatio(
+                        _crop ?? const CropRect(x: 0, y: 0, w: 1, h: 1),
+                        widget.targetAspectRatio!);
                     setState(() => _crop = c);
                     widget.onCropChanged(c);
                   },

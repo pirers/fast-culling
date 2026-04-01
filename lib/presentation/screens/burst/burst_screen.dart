@@ -53,11 +53,12 @@ class BurstScreen extends ConsumerWidget {
                 SizedBox(
                   width: 160,
                   child: Slider(
-                    min: 1,
-                    max: 30,
-                    divisions: 29,
-                    value: (state.thresholdMs / 1000).clamp(1.0, 30.0),
-                    label: '${(state.thresholdMs / 1000).round()} s',
+                    // 0.25 s to 4.0 s in 0.25 s steps → 15 divisions
+                    min: 0.25,
+                    max: 4.0,
+                    divisions: 15,
+                    value: (state.thresholdMs / 1000).clamp(0.25, 4.0),
+                    label: '${(state.thresholdMs / 1000).toStringAsFixed(2)} s',
                     onChanged: (v) {
                       ref
                           .read(burstProvider.notifier)
@@ -65,8 +66,10 @@ class BurstScreen extends ConsumerWidget {
                     },
                   ),
                 ),
-                Text('${(state.thresholdMs / 1000).round()} s',
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  '${(state.thresholdMs / 1000).toStringAsFixed(2)} s',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),
@@ -144,7 +147,7 @@ class BurstScreen extends ConsumerWidget {
                   if (state.photos.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Gap: ${(state.thresholdMs / 1000).round()} s  •  '
+                      'Gap: ${(state.thresholdMs / 1000).toStringAsFixed(2)} s  •  '
                       'Min frames: ${state.minFrames}  •  '
                       '${state.photos.length} photo(s) scanned',
                       style: Theme.of(context).textTheme.bodySmall,
@@ -168,7 +171,7 @@ class BurstScreen extends ConsumerWidget {
   }
 }
 
-/// A burst card that animates through all frames in the burst at ~800 ms per frame.
+/// A burst card that animates through all frames only while the mouse hovers over it.
 class _AnimatedBurstCard extends StatefulWidget {
   final Burst burst;
   const _AnimatedBurstCard({required this.burst});
@@ -181,24 +184,8 @@ class _AnimatedBurstCardState extends State<_AnimatedBurstCard> {
   int _frameIndex = 0;
   Timer? _timer;
 
-  @override
-  void initState() {
-    super.initState();
-    _startTimer();
-  }
-
-  @override
-  void didUpdateWidget(_AnimatedBurstCard old) {
-    super.didUpdateWidget(old);
-    if (old.burst.id != widget.burst.id ||
-        old.burst.frames.length != widget.burst.frames.length) {
-      _frameIndex = 0;
-      _timer?.cancel();
-      _startTimer();
-    }
-  }
-
   void _startTimer() {
+    _timer?.cancel();
     if (widget.burst.frames.length > 1) {
       _timer = Timer.periodic(const Duration(milliseconds: 800), (_) {
         if (mounted) {
@@ -207,6 +194,12 @@ class _AnimatedBurstCardState extends State<_AnimatedBurstCard> {
         }
       });
     }
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+    if (mounted) setState(() => _frameIndex = 0);
   }
 
   @override
@@ -218,42 +211,46 @@ class _AnimatedBurstCardState extends State<_AnimatedBurstCard> {
   @override
   Widget build(BuildContext context) {
     final frame = widget.burst.frames[_frameIndex];
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => Navigator.of(context)
-            .pushNamed('/burst/detail', arguments: widget.burst.id),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: ClipRect(
-                  child: Image.file(
-                    File(frame.photo.absolutePath),
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    cacheWidth: 480,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: Colors.grey.shade300,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.broken_image, size: 48),
+    return MouseRegion(
+      onEnter: (_) => _startTimer(),
+      onExit: (_) => _stopTimer(),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.of(context)
+              .pushNamed('/burst/detail', arguments: widget.burst.id),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ClipRect(
+                    child: Image.file(
+                      File(frame.photo.absolutePath),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      cacheWidth: 480,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey.shade300,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.broken_image, size: 48),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${widget.burst.frames.length} frames',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              Text(
-                widget.burst.id,
-                style: Theme.of(context).textTheme.labelSmall,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  '${widget.burst.frames.length} frames',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Text(
+                  widget.burst.id,
+                  style: Theme.of(context).textTheme.labelSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -24,6 +24,7 @@ class FfmpegServiceImpl implements FfmpegService {
     required Burst burst,
     required String outputDirectory,
     required int fps,
+    required double imageDurationSeconds,
     required List<int> resolution,
     void Function(ExportProgress)? onProgress,
     bool Function()? isCancelled,
@@ -38,7 +39,7 @@ class FfmpegServiceImpl implements FfmpegService {
       final tempDir = await Directory.systemTemp.createTemp('fast_culling_');
       final listFile = File(p.join(tempDir.path, 'frames.txt'));
       final buf = StringBuffer();
-      final frameDuration = (1 / fps).toStringAsFixed(6);
+      final frameDuration = imageDurationSeconds.toStringAsFixed(6);
       for (final frame in frames) {
         // Escape embedded single quotes for the ffmpeg concat file format.
         // The sequence '\'' closes the current quote, inserts a literal ', then

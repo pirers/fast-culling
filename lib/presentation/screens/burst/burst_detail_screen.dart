@@ -27,6 +27,11 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
     // Capture messenger before any async gap to satisfy use_build_context_synchronously.
     final messenger = ScaffoldMessenger.of(context);
 
+    // ── Step 1: show export settings dialog ──────────────────────────────────
+    final settings = await _showExportDialog(burst);
+    if (settings == null || !mounted) return;
+
+    // ── Step 2: pick output folder ────────────────────────────────────────────
     final outputDir = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Choose export folder',
     );
@@ -37,6 +42,7 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
       _exportProgress = null;
     });
 
+    // ── Step 3: check ffmpeg ──────────────────────────────────────────────────
     final service = const FfmpegServiceImpl();
     final available = await service.isAvailable();
     if (!mounted) return;
@@ -51,10 +57,12 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
       return;
     }
 
+    // ── Step 4: run export ────────────────────────────────────────────────────
     final result = await service.exportBurst(
       burst: burst,
       outputDirectory: outputDir,
-      fps: burst.defaultFps,
+      fps: settings.fps,
+      imageDurationSeconds: settings.imageDurationSeconds,
       resolution: burst.defaultResolution,
       onProgress: (p) {
         if (mounted) setState(() => _exportProgress = p);
@@ -71,6 +79,18 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
         content: Text(result.success
             ? 'Exported to ${result.outputPath}'
             : 'Export failed: ${result.error}'),
+      ),
+    );
+  }
+
+  /// Shows the export-settings dialog and returns the chosen settings,
+  /// or null if the user cancelled.
+  Future<_ExportSettings?> _showExportDialog(Burst burst) {
+    return showDialog<_ExportSettings>(
+      context: context,
+      builder: (ctx) => _ExportSettingsDialog(
+        initialFps: burst.defaultFps,
+        initialImageDurationSeconds: 1.0 / burst.defaultFps,
       ),
     );
   }
@@ -170,8 +190,8 @@ class _FrameTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 160,
-        margin: const EdgeInsets.only(right: 8, bottom: 16),
+        // No fixed width — width is determined by the image's natural aspect ratio.
+        margin: const EdgeInsets.only(right: 8, bottom: 8),
         decoration: BoxDecoration(
           border: Border.all(
             color: frame.isKeyframe ? Colors.amber : Colors.grey.shade300,
@@ -180,23 +200,27 @@ class _FrameTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(3)),
-                child: Opacity(
-                  opacity: frame.included ? 1.0 : 0.45,
-                  child: Image.file(
-                    File(frame.photo.absolutePath),
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    cacheWidth: 320,
-                    errorBuilder: (ctx, e, st) => Container(
+            // Image at fixed height; width auto-scales to source aspect ratio.
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(3)),
+              child: Opacity(
+                opacity: frame.included ? 1.0 : 0.45,
+                child: Image.file(
+                  File(frame.photo.absolutePath),
+                  height: 200,
+                  fit: BoxFit.contain,
+                  cacheWidth: 640,
+                  errorBuilder: (ctx, e, st) => SizedBox(
+                    width: 160,
+                    height: 200,
+                    child: Container(
                       color: Colors.grey.shade300,
                       alignment: Alignment.center,
-                      child:
-                          const Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                      child: const Icon(Icons.broken_image,
+                          size: 40, color: Colors.grey),
                     ),
                   ),
                 ),
@@ -219,4 +243,114 @@ class _FrameTile extends StatelessWidget {
           ],
         ),
       );
+}
+
+// ─── Export settings ─────────────────────────────────────────────────────────
+
+class _ExportSettings {
+  final int fps;
+  final double imageDurationSeconds;
+  const _ExportSettings({required this.fps, required this.imageDurationSeconds});
+}
+
+/// Dialog that lets the user choose FPS and per-image duration before exporting.
+class _ExportSettingsDialog extends StatefulWidget {
+  final int initialFps;
+  final double initialImageDurationSeconds;
+
+  const _ExportSettingsDialog({
+    required this.initialFps,
+    required this.initialImageDurationSeconds,
+  });
+
+  @override
+  State<_ExportSettingsDialog> createState() => _ExportSettingsDialogState();
+}
+
+class _ExportSettingsDialogState extends State<_ExportSettingsDialog> {
+  late int _fps;
+  late double _imageDuration; // seconds per image
+
+  static const _fpsOptions = [12, 24, 25, 30, 50, 60];
+
+  @override
+  void initState() {
+    super.initState();
+    _fps = _fpsOptions.contains(widget.initialFps)
+        ? widget.initialFps
+        : _fpsOptions.first;
+    // Clamp to slider range 0.1–5.0 s.
+    _imageDuration = widget.initialImageDurationSeconds.clamp(0.1, 5.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Export settings'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── FPS row ──────────────────────────────────────────────────────
+            Text('Frame rate (FPS)',
+                style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              children: _fpsOptions
+                  .map((f) => ChoiceChip(
+                        label: Text('$f'),
+                        selected: _fps == f,
+                        onSelected: (_) => setState(() => _fps = f),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 16),
+            // ── Image duration row ───────────────────────────────────────────
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Duration per image',
+                    style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  '${_imageDuration.toStringAsFixed(2)} s',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            Slider(
+              // 0.1 s to 5.0 s in 0.1 s steps → 49 divisions
+              min: 0.1,
+              max: 5.0,
+              divisions: 49,
+              value: _imageDuration,
+              label: '${_imageDuration.toStringAsFixed(2)} s',
+              onChanged: (v) => setState(() => _imageDuration = v),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Total video length ≈ '
+              '${(_imageDuration * _fps).toStringAsFixed(0)} frames per image  •  '
+              'Output: $_fps fps',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(
+            _ExportSettings(fps: _fps, imageDurationSeconds: _imageDuration),
+          ),
+          child: const Text('Export'),
+        ),
+      ],
+    );
+  }
 }

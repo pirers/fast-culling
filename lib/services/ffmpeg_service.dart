@@ -30,6 +30,7 @@ abstract class FfmpegService {
   ///
   /// [outputDirectory] — directory for the output file.
   /// [fps] — frames per second for the output video.
+  /// [imageDurationSeconds] — how long each source photo is visible in the video.
   /// [resolution] — [width, height] of the output video.
   /// [onProgress] — called periodically during export.
   /// [isCancelled] — if returns true, export is cancelled and temp files cleaned.
@@ -37,6 +38,7 @@ abstract class FfmpegService {
     required Burst burst,
     required String outputDirectory,
     required int fps,
+    required double imageDurationSeconds,
     required List<int> resolution,
     void Function(ExportProgress)? onProgress,
     bool Function()? isCancelled,
