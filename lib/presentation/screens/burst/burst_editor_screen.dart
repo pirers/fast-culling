@@ -138,7 +138,12 @@ class _BurstEditorScreenState extends ConsumerState<BurstEditorScreen> {
                   setState(() => burst.frames[i].included = value);
                 },
                 onKeyframeChanged: (value) {
-                  setState(() => burst.frames[i].isKeyframe = value);
+                  setState(() {
+                    burst.frames[i].isKeyframe = value;
+                    // Removing keyframe status also clears any explicit crop so
+                    // the frame no longer anchors the interpolation.
+                    if (!value) burst.frames[i].crop = null;
+                  });
                 },
               ),
             ),
@@ -156,8 +161,9 @@ class _BurstEditorScreenState extends ConsumerState<BurstEditorScreen> {
                     onCropChanged: (crop) {
                       setState(() {
                         burst.frames[_selectedFrameIndex!].crop = crop;
-                        // Automatically promote to keyframe when crop is set.
-                        burst.frames[_selectedFrameIndex!].isKeyframe = true;
+                        // Non-null crop auto-promotes to keyframe; null clears it.
+                        burst.frames[_selectedFrameIndex!].isKeyframe =
+                            crop != null;
                       });
                     },
                   )
@@ -304,7 +310,7 @@ class _CropEditorPanel extends StatefulWidget {
   final int frameIndex;
   final Burst burst;
   final AspectRatio? targetAspectRatio;
-  final ValueChanged<CropRect> onCropChanged;
+  final ValueChanged<CropRect?> onCropChanged;
 
   const _CropEditorPanel({
     super.key,
@@ -576,14 +582,18 @@ class _CropEditorPanelState extends State<_CropEditorPanel> {
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const Spacer(),
-              if (_crop != null)
+              // Only show "Reset crop" when this frame has an explicit crop
+              // saved (not just an interpolated preview).
+              if (widget.frame.crop != null)
                 TextButton.icon(
                   icon: const Icon(Icons.crop_free, size: 16),
                   label: const Text('Reset crop'),
                   onPressed: () {
-                    final full = const CropRect(x: 0, y: 0, w: 1, h: 1);
-                    setState(() => _crop = full);
-                    widget.onCropChanged(full);
+                    // Notify parent to clear crop + keyframe on the frame.
+                    widget.onCropChanged(null);
+                    // Re-derive the displayed crop from the now-cleared frame
+                    // (will show interpolated or aspect-ratio default if available).
+                    setState(() => _crop = _initialCrop());
                   },
                 ),
               if (widget.targetAspectRatio != null)

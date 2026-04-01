@@ -15,7 +15,13 @@ class ExportResult {
   final bool success;
   final String? outputPath;
   final String? error;
-  const ExportResult({required this.success, this.outputPath, this.error});
+
+  /// Path to the FFmpeg log file written alongside the output.
+  /// Always set (even on failure) so the user can inspect the command and output.
+  final String? logPath;
+
+  const ExportResult(
+      {required this.success, this.outputPath, this.error, this.logPath});
 }
 
 /// Interface for the FFmpeg wrapper service.

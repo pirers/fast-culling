@@ -82,7 +82,11 @@ class _BurstDetailScreenState extends ConsumerState<BurstDetailScreen> {
       SnackBar(
         content: Text(result.success
             ? 'Exported to ${result.outputPath}'
-            : 'Export failed: ${result.error}'),
+            : 'Export failed: ${result.error}'
+                '${result.logPath != null ? '\nLog: ${result.logPath}' : ''}'),
+        duration: result.success
+            ? const Duration(seconds: 4)
+            : const Duration(seconds: 8),
       ),
     );
   }

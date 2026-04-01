@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:fast_culling/domain/algorithms/crop_interpolator.dart';
 import 'package:fast_culling/domain/entities/burst.dart';
 import 'package:fast_culling/services/ffmpeg_service.dart';
 import 'package:path/path.dart' as p;
@@ -67,51 +68,93 @@ class FfmpegServiceImpl implements FfmpegService {
     void Function(ExportProgress)? onProgress,
     bool Function()? isCancelled,
   }) async {
+    // Log buffer — written to <outputPath>.log alongside the video.
+    final logBuf = StringBuffer();
+    final logFile = File('$outputPath.log');
+
     try {
-      final frames = burst.frames.where((f) => f.included).toList();
-      if (frames.isEmpty) {
-        return const ExportResult(success: false, error: 'No included frames.');
+      // ── Collect included frames with their original indices ────────────────
+      final included = <({int origIndex, BurstFrame frame})>[];
+      for (var i = 0; i < burst.frames.length; i++) {
+        if (burst.frames[i].included) {
+          included.add((origIndex: i, frame: burst.frames[i]));
+        }
       }
 
-      // Write an ffmpeg concat demuxer file listing each frame with its duration.
-      final tempDir = await Directory.systemTemp.createTemp('fast_culling_');
-      final listFile = File(p.join(tempDir.path, 'frames.txt'));
-      final buf = StringBuffer();
-      final frameDuration = imageDurationSeconds.toStringAsFixed(6);
-      for (final frame in frames) {
-        // Escape embedded single quotes for the ffmpeg concat file format.
-        // The sequence '\'' closes the current quote, inserts a literal ', then
-        // reopens: e.g., foo'bar is written as 'foo'\''bar'.
-        final path = frame.photo.absolutePath.replaceAll("'", r"'\''");
-        buf.writeln("file '$path'");
-        buf.writeln('duration $frameDuration');
+      if (included.isEmpty) {
+        return ExportResult(
+            success: false, error: 'No included frames.', logPath: null);
       }
-      // The concat demuxer requires the last entry to be duplicated without a
-      // duration so ffmpeg doesn't drop the final frame.
-      if (frames.isNotEmpty) {
-        final last = frames.last.photo.absolutePath.replaceAll("'", r"'\''");
-        buf.writeln("file '$last'");
-      }
-      await listFile.writeAsString(buf.toString());
 
       final binary = await _resolveFfmpegPath();
 
-      final args = [
+      // Ensure output dimensions are even (libx264 requirement).
+      final W = (resolution[0] ~/ 2) * 2;
+      final H = (resolution[1] ~/ 2) * 2;
+      final durStr = imageDurationSeconds.toStringAsFixed(6);
+
+      // ── Build a filter_complex that applies per-frame crop ─────────────────
+      //
+      // Each still-image input is looped for [imageDurationSeconds] seconds.
+      // A per-frame crop (from keyframe interpolation) is applied before the
+      // common scale→pad→setsar chain, producing a labelled output [v0], [v1], …
+      // which are then joined by the concat filter.
+      //
+      // Crop values are in normalised 0–1 space (relative to the image's own
+      // pixel dimensions), so ffmpeg expressions like `iw*0.25` are used.
+      final filterParts = <String>[];
+      for (var i = 0; i < included.length; i++) {
+        final crop = interpolateCrop(burst, included[i].origIndex);
+        final cropFilter = crop != null
+            ? 'crop=iw*${crop.w.toStringAsFixed(8)}'
+                ':ih*${crop.h.toStringAsFixed(8)}'
+                ':iw*${crop.x.toStringAsFixed(8)}'
+                ':ih*${crop.y.toStringAsFixed(8)},'
+            : '';
+        filterParts.add(
+          '[$i:v]${cropFilter}'
+          'scale=$W:$H:force_original_aspect_ratio=decrease,'
+          'pad=$W:$H:(ow-iw)/2:(oh-ih)/2:color=black,'
+          'setsar=1[v$i]',
+        );
+      }
+      final concatPads =
+          Iterable.generate(included.length, (i) => '[v$i]').join();
+      final filterComplex =
+          '${filterParts.join(';')};${concatPads}concat=n=${included.length}:v=1:a=0[v]';
+
+      // ── Assemble the full argument list ────────────────────────────────────
+      final args = <String>[
         '-y',
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', listFile.path,
-        '-vf',
-        'scale=${resolution[0]}:${resolution[1]}'
-            ':force_original_aspect_ratio=decrease,'
-            'pad=${resolution[0]}:${resolution[1]}:(ow-iw)/2:(oh-ih)/2',
+        // One looped still-image input per included frame.
+        for (final f in included) ...[
+          '-loop', '1',
+          '-t', durStr,
+          '-i', f.frame.photo.absolutePath,
+        ],
+        '-filter_complex', filterComplex,
+        '-map', '[v]',
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
         '-r', '$fps',
         outputPath,
       ];
 
+      // ── Write log header ───────────────────────────────────────────────────
+      logBuf
+        ..writeln('=== fast_culling FFmpeg export ===')
+        ..writeln('Time   : ${DateTime.now().toIso8601String()}')
+        ..writeln('Binary : $binary')
+        ..writeln('Command: $binary ${args.join(' ')}')
+        ..writeln();
+      await logFile.writeAsString(logBuf.toString());
+
+      // ── Run ffmpeg ─────────────────────────────────────────────────────────
       final process = await Process.start(binary, args);
+
+      final stderrBuf = StringBuffer();
+      final totalOutputFrames =
+          (included.length * imageDurationSeconds * fps).round();
 
       process.stderr.listen((data) {
         if (isCancelled?.call() ?? false) {
@@ -119,37 +162,54 @@ class FfmpegServiceImpl implements FfmpegService {
           return;
         }
         final line = String.fromCharCodes(data);
+        stderrBuf.write(line);
         final match = RegExp(r'frame=\s*(\d+)').firstMatch(line);
         if (match != null) {
           final done = int.tryParse(match.group(1)!.trim()) ?? 0;
           onProgress?.call(ExportProgress(
             framesProcessed: done,
-            totalFrames: frames.length,
+            totalFrames: totalOutputFrames > 0 ? totalOutputFrames : 1,
           ));
         }
       });
 
       final exitCode = await process.exitCode;
 
-      // Clean up temp files regardless of exit status.
-      try {
-        await tempDir.delete(recursive: true);
-      } catch (_) {}
+      // ── Append stderr + exit code to log ───────────────────────────────────
+      logBuf
+        ..writeln('--- FFmpeg output ---')
+        ..write(stderrBuf.toString())
+        ..writeln()
+        ..writeln('--- Exit code: $exitCode ---');
+      await logFile.writeAsString(logBuf.toString());
 
+      // ── Handle cancellation ────────────────────────────────────────────────
       if (isCancelled?.call() ?? false) {
         try {
           await File(outputPath).delete();
         } catch (_) {}
-        return const ExportResult(success: false, error: 'Cancelled.');
+        return ExportResult(
+            success: false, error: 'Cancelled.', logPath: logFile.path);
       }
 
       if (exitCode == 0) {
-        return ExportResult(success: true, outputPath: outputPath);
+        return ExportResult(
+            success: true,
+            outputPath: outputPath,
+            logPath: logFile.path);
       }
       return ExportResult(
-          success: false, error: 'FFmpeg exited with code $exitCode.');
+          success: false,
+          error: 'FFmpeg exited with code $exitCode.',
+          logPath: logFile.path);
     } catch (e) {
-      return ExportResult(success: false, error: e.toString());
+      // Attempt to flush whatever we have to the log.
+      try {
+        logBuf.writeln('--- Exception: $e ---');
+        await logFile.writeAsString(logBuf.toString());
+      } catch (_) {}
+      return ExportResult(
+          success: false, error: e.toString(), logPath: logFile.path);
     }
   }
 }
