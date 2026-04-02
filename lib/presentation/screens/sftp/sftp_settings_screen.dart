@@ -1,7 +1,9 @@
 import 'package:fast_culling/domain/entities/sftp_config.dart';
+import 'package:fast_culling/persistence/secure_storage.dart';
 import 'package:fast_culling/presentation/design_system/app_button.dart';
 import 'package:fast_culling/presentation/design_system/app_scaffold.dart';
 import 'package:fast_culling/presentation/design_system/app_text_field.dart';
+import 'package:fast_culling/presentation/providers/remote_dir_provider.dart';
 import 'package:fast_culling/presentation/providers/sftp_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,8 +30,6 @@ class _SftpSettingsScreenState extends ConsumerState<SftpSettingsScreen> {
     _hostCtrl = TextEditingController(text: config?.host ?? '');
     _portCtrl = TextEditingController(text: '${config?.port ?? 22}');
     _usernameCtrl = TextEditingController(text: config?.username ?? '');
-    // Password is intentionally left empty for security: the stored password
-    // is write-only and is never read back into the UI.
     _passwordCtrl = TextEditingController();
     _remoteDirCtrl =
         TextEditingController(text: config?.remoteDirectory ?? '/');
@@ -45,15 +45,19 @@ class _SftpSettingsScreenState extends ConsumerState<SftpSettingsScreen> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     final config = SftpConfig(
       host: _hostCtrl.text.trim(),
       port: int.tryParse(_portCtrl.text.trim()) ?? 22,
       username: _usernameCtrl.text.trim(),
       remoteDirectory: _remoteDirCtrl.text.trim(),
     );
-    ref.read(sftpProvider.notifier).updateConfig(config);
-    Navigator.of(context).pop();
+    await ref.read(sftpProvider.notifier).updateConfig(config);
+    if (_passwordCtrl.text.isNotEmpty) {
+      await SecureStorage().saveSftpPassword(_passwordCtrl.text);
+    }
+    ref.read(remoteDirProvider.notifier).setConfig(config);
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -91,3 +95,4 @@ class _SftpSettingsScreenState extends ConsumerState<SftpSettingsScreen> {
         ),
       );
 }
+

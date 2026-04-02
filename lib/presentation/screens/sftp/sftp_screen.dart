@@ -1,6 +1,12 @@
 import 'package:fast_culling/presentation/design_system/app_button.dart';
 import 'package:fast_culling/presentation/design_system/app_scaffold.dart';
+import 'package:fast_culling/presentation/design_system/app_split_view.dart';
+import 'package:fast_culling/presentation/providers/local_folder_provider.dart';
+import 'package:fast_culling/presentation/providers/remote_dir_provider.dart';
 import 'package:fast_culling/presentation/providers/sftp_provider.dart';
+import 'package:fast_culling/presentation/screens/sftp/local_folder_panel.dart';
+import 'package:fast_culling/presentation/screens/sftp/remote_folder_panel.dart';
+import 'package:fast_culling/presentation/screens/sftp/upload_progress_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,7 +16,11 @@ class SftpScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(sftpProvider);
+    final sftpState = ref.watch(sftpProvider);
+    final sftpNotifier = ref.read(sftpProvider.notifier);
+    final localNotifier = ref.read(localFolderProvider.notifier);
+    final remoteState = ref.watch(remoteDirProvider);
+    final selectedPhotos = localNotifier.selectedPhotos;
 
     return AppScaffold(
       appBar: AppBar(
@@ -19,38 +29,61 @@ class SftpScreen extends ConsumerWidget {
           AppButton(
             label: 'Settings',
             variant: AppButtonVariant.secondary,
-            onPressed: () => Navigator.of(context).pushNamed('/sftp/settings'),
+            onPressed: () =>
+                Navigator.of(context).pushNamed('/sftp/settings'),
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: Center(
-        child: state.config == null
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
+      body: Column(
+        children: [
+          Expanded(
+            child: AppSplitView(
+              leadingFlex: 1,
+              trailingFlex: 1,
+              leading: const LocalFolderPanel(),
+              trailing: const RemoteFolderPanel(),
+            ),
+          ),
+          if (selectedPhotos.isNotEmpty || sftpState.isUploading)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                    top: BorderSide(color: Colors.grey.shade300)),
+              ),
+              child: Row(
                 children: [
-                  const Text('No SFTP connection configured.'),
-                  const SizedBox(height: 16),
-                  AppButton(
-                    label: 'Configure Connection',
-                    onPressed: () =>
-                        Navigator.of(context).pushNamed('/sftp/settings'),
+                  Text(
+                    '${selectedPhotos.length} file(s) selected for upload',
+                    style: const TextStyle(fontSize: 13),
                   ),
-                ],
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Host: ${state.config!.host}:${state.config!.port}'),
-                  const SizedBox(height: 8),
-                  Text('Remote: ${state.config!.remoteDirectory}'),
-                  const SizedBox(height: 16),
+                  const Spacer(),
                   AppButton(
-                    label: 'Select Folder & Upload',
-                    onPressed: state.isUploading ? null : () {},
+                    label: sftpState.isUploading
+                        ? 'Uploading…'
+                        : 'Upload ${selectedPhotos.length} Files',
+                    onPressed: sftpState.isUploading ||
+                            selectedPhotos.isEmpty ||
+                            !remoteState.isConnected
+                        ? null
+                        : () async {
+                            await sftpNotifier.uploadSelected(
+                              photos: selectedPhotos,
+                              remoteDir: remoteState.currentPath,
+                              onRecordUpdate: localNotifier.updateUploadRecord,
+                            );
+                          },
                   ),
                 ],
               ),
+            ),
+          const UploadProgressPanel(),
+        ],
       ),
     );
   }
 }
+

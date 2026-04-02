@@ -1,6 +1,7 @@
 import 'package:fast_culling/presentation/screens/burst/burst_detail_screen.dart';
 import 'package:fast_culling/presentation/screens/burst/burst_editor_screen.dart';
 import 'package:fast_culling/presentation/screens/home_screen.dart';
+import 'package:fast_culling/presentation/screens/sftp/sftp_screen.dart';
 import 'package:fast_culling/presentation/screens/sftp/sftp_settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +29,8 @@ class FastCullingApp extends StatelessWidget {
     switch (settings.name) {
       case '/':
         return MaterialPageRoute(builder: (_) => const HomeScreen());
+      case '/sftp':
+        return MaterialPageRoute(builder: (_) => const SftpScreen());
       case '/sftp/settings':
         return MaterialPageRoute(builder: (_) => const SftpSettingsScreen());
       case '/burst/detail':

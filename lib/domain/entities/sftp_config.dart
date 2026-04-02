@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+
 /// SFTP connection configuration.
 class SftpConfig {
   final String host;
@@ -41,4 +46,30 @@ class SftpConfig {
         username: username ?? this.username,
         remoteDirectory: remoteDirectory ?? this.remoteDirectory,
       );
+
+  static const _filename = 'sftp_config.json';
+
+  static Future<File> _file() async {
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}${Platform.pathSeparator}$_filename');
+  }
+
+  static Future<SftpConfig?> load() async {
+    try {
+      final file = await _file();
+      if (!await file.exists()) return null;
+      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      return SftpConfig.fromJson(json);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> save() async {
+    final file = await _file();
+    await file.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(toJson()),
+      flush: true,
+    );
+  }
 }
