@@ -6,6 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class UploadProgressPanel extends ConsumerWidget {
   const UploadProgressPanel({super.key});
 
+  String _uploadStatusLabel(SftpState state) {
+    if (!state.isUploading) return 'Upload complete';
+    final count = 'Uploading ${state.completedFiles + 1}/${state.totalFiles}';
+    final filename = state.currentFilename;
+    return filename != null ? '$count: $filename' : count;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(sftpProvider);
@@ -33,10 +40,7 @@ class UploadProgressPanel extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  state.isUploading
-                      ? 'Uploading ${state.completedFiles + 1}/${state.totalFiles}'
-                          '${state.currentFilename != null ? ': ${state.currentFilename}' : ''}'
-                      : 'Upload complete',
+                  _uploadStatusLabel(state),
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),
