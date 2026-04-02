@@ -2,7 +2,7 @@ import 'package:fast_culling/presentation/providers/local_folder_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-String _fmtDt(DateTime dt) {
+String _formatDateTime(DateTime dt) {
   String pad(int n, [int w = 2]) => n.toString().padLeft(w, '0');
   return '${dt.year}-${pad(dt.month)}-${pad(dt.day)} ${pad(dt.hour)}:${pad(dt.minute)}';
 }
@@ -31,10 +31,10 @@ class TimelineFilterBar extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Text(_fmtDt(state.filterFrom ?? min),
+            Text(_formatDateTime(state.filterFrom ?? min),
                 style: const TextStyle(fontSize: 11)),
             const Spacer(),
-            Text(_fmtDt(state.filterTo ?? max),
+            Text(_formatDateTime(state.filterTo ?? max),
                 style: const TextStyle(fontSize: 11)),
             const SizedBox(width: 8),
             if (state.filterFrom != null || state.filterTo != null)

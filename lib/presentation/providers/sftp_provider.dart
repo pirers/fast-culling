@@ -159,12 +159,14 @@ class SftpNotifier extends StateNotifier<SftpState> {
         filename: filename,
         onProgress: (sent, total) {
           if (!mounted) return;
+          final fileProgress = total > 0 ? sent / total : 0.0;
+          final overall = state.totalFiles > 0
+              ? (i + fileProgress) / state.totalFiles
+              : 0.0;
           state = state.copyWith(
             currentBytesSent: sent,
             currentBytesTotal: total,
-            uploadProgress: state.totalFiles > 0
-                ? (i + (total > 0 ? sent / total : 0)) / state.totalFiles
-                : 0,
+            uploadProgress: overall,
           );
         },
         isCancelled: () => state.isCancelled,

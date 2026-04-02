@@ -3,6 +3,11 @@ import 'package:fast_culling/presentation/providers/sftp_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+String _joinPath(String base, String name) {
+  if (base.endsWith('/')) return '$base$name';
+  return '$base/$name';
+}
+
 class RemoteFolderPanel extends ConsumerWidget {
   const RemoteFolderPanel({super.key});
 
@@ -127,11 +132,9 @@ class RemoteFolderPanel extends ConsumerWidget {
                             style: const TextStyle(fontSize: 13),
                           ),
                           onTap: entry.isDirectory
-                              ? () {
-                                  final newPath =
-                                      '${remoteState.currentPath.endsWith('/') ? remoteState.currentPath : '${remoteState.currentPath}/'}${entry.name}';
-                                  remoteNotifier.navigateTo(newPath);
-                                }
+                              ? () => remoteNotifier.navigateTo(
+                                    _joinPath(remoteState.currentPath, entry.name),
+                                  )
                               : null,
                         );
                       },
