@@ -5,7 +5,19 @@ import 'dart:ui' as ui;
 import 'package:fast_culling/services/thumbnail_service.dart';
 
 class ThumbnailServiceImpl implements ThumbnailService {
+  static const _maxCacheEntries = 500;
   final _cache = <String, Uint8List?>{};
+  final _insertionOrder = <String>[];
+
+  void _put(String key, Uint8List? value) {
+    if (_cache.containsKey(key)) return;
+    if (_cache.length >= _maxCacheEntries) {
+      final oldest = _insertionOrder.removeAt(0);
+      _cache.remove(oldest);
+    }
+    _cache[key] = value;
+    _insertionOrder.add(key);
+  }
 
   @override
   Future<Uint8List?> getThumbnail(String absolutePath,
@@ -24,14 +36,17 @@ class ThumbnailServiceImpl implements ThumbnailService {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
       final result = byteData?.buffer.asUint8List();
-      _cache[key] = result;
+      _put(key, result);
       return result;
     } catch (_) {
-      _cache[key] = null;
+      _put(key, null);
       return null;
     }
   }
 
   @override
-  Future<void> clearCache() async => _cache.clear();
+  Future<void> clearCache() async {
+    _cache.clear();
+    _insertionOrder.clear();
+  }
 }

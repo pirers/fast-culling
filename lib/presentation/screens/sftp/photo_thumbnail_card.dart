@@ -16,9 +16,9 @@ final _thumbnailProvider =
 
 String _formatTimestamp(DateTime dt) {
   String pad(int n, [int width = 2]) => n.toString().padLeft(width, '0');
-  final formattedMs = pad(dt.millisecond, 3);
+  final paddedMs = pad(dt.millisecond, 3);
   return '${dt.year}-${pad(dt.month)}-${pad(dt.day)} '
-      '${pad(dt.hour)}:${pad(dt.minute)}:${pad(dt.second)}.$formattedMs';
+      '${pad(dt.hour)}:${pad(dt.minute)}:${pad(dt.second)}.$paddedMs';
 }
 
 class PhotoThumbnailCard extends ConsumerWidget {

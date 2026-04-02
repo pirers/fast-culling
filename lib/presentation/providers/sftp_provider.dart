@@ -193,18 +193,7 @@ class SftpNotifier extends StateNotifier<SftpState> {
       );
     }
 
-    state = SftpState(
-      config: state.config,
-      isConnected: state.isConnected,
-      isTesting: state.isTesting,
-      connectionError: state.connectionError,
-      uploadLog: state.uploadLog,
-      isUploading: false,
-      uploadProgress: state.uploadProgress,
-      totalFiles: state.totalFiles,
-      completedFiles: state.completedFiles,
-      isCancelled: state.isCancelled,
-    );
+    state = state.copyWith(isUploading: false, uploadProgress: 1);
     if (!state.isCancelled) {
       addLog('Done. ${state.completedFiles}/${state.totalFiles} files processed.');
     }

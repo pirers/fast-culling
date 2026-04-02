@@ -6,21 +6,26 @@ import 'package:fast_culling/domain/entities/sftp_config.dart';
 import 'package:fast_culling/services/sftp_service.dart';
 
 class SftpServiceImpl implements SftpService {
+  Future<SSHClient> _connect(SftpConfig config, String password) async {
+    final socket = await SSHSocket.connect(
+      config.host,
+      config.port,
+      timeout: const Duration(seconds: 10),
+    );
+    final client = SSHClient(
+      socket,
+      username: config.username,
+      onPasswordRequest: () => password,
+    );
+    await client.authenticated;
+    return client;
+  }
+
   @override
   Future<SftpResult> testConnection(SftpConfig config, String password) async {
     SSHClient? client;
     try {
-      final socket = await SSHSocket.connect(
-        config.host,
-        config.port,
-        timeout: const Duration(seconds: 10),
-      );
-      client = SSHClient(
-        socket,
-        username: config.username,
-        onPasswordRequest: () => password,
-      );
-      await client.authenticated;
+      client = await _connect(config, password);
       return const SftpResult(success: true);
     } catch (e) {
       return SftpResult(success: false, error: e.toString());
@@ -37,17 +42,7 @@ class SftpServiceImpl implements SftpService {
   ) async {
     SSHClient? client;
     try {
-      final socket = await SSHSocket.connect(
-        config.host,
-        config.port,
-        timeout: const Duration(seconds: 10),
-      );
-      client = SSHClient(
-        socket,
-        username: config.username,
-        onPasswordRequest: () => password,
-      );
-      await client.authenticated;
+      client = await _connect(config, password);
       final sftp = await client.sftp();
       final items = await sftp.listdir(remotePath);
       return items
@@ -80,17 +75,7 @@ class SftpServiceImpl implements SftpService {
     try {
       final localFile = File(localPath);
       final totalBytes = await localFile.length();
-      final socket = await SSHSocket.connect(
-        config.host,
-        config.port,
-        timeout: const Duration(seconds: 10),
-      );
-      client = SSHClient(
-        socket,
-        username: config.username,
-        onPasswordRequest: () => password,
-      );
-      await client.authenticated;
+      client = await _connect(config, password);
       final sftp = await client.sftp();
       final remoteFile = await sftp.open(
         partialPath,
@@ -130,17 +115,7 @@ class SftpServiceImpl implements SftpService {
   ) async {
     SSHClient? client;
     try {
-      final socket = await SSHSocket.connect(
-        config.host,
-        config.port,
-        timeout: const Duration(seconds: 10),
-      );
-      client = SSHClient(
-        socket,
-        username: config.username,
-        onPasswordRequest: () => password,
-      );
-      await client.authenticated;
+      client = await _connect(config, password);
       final sftp = await client.sftp();
       await sftp.remove(remotePath);
       return const SftpResult(success: true);

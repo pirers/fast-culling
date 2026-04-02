@@ -83,12 +83,12 @@ class RemoteDirNotifier extends StateNotifier<RemoteDirState> {
     state = state.copyWith(isLoading: false, entries: entries);
   }
 
-  void navigateUp() {
+  Future<void> navigateUp() async {
     final parts =
         state.currentPath.split('/').where((part) => part.isNotEmpty).toList();
     if (parts.isEmpty) return;
     parts.removeLast();
-    navigateTo(parts.isEmpty ? '/' : '/${parts.join('/')}');
+    await navigateTo(parts.isEmpty ? '/' : '/${parts.join('/')}');
   }
 }
 
