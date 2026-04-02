@@ -12,9 +12,9 @@ class RemoteFolderPanel extends ConsumerWidget {
     final remoteState = ref.watch(remoteDirProvider);
     final remoteNotifier = ref.read(remoteDirProvider.notifier);
 
-    if (sftpState.config != null) {
-      remoteNotifier.setConfig(sftpState.config!);
-    }
+    ref.listen(sftpProvider.select((s) => s.config), (_, config) {
+      if (config != null) remoteNotifier.setConfig(config);
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
