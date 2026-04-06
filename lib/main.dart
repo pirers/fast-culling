@@ -15,7 +15,11 @@ void main() async {
       overrides: [
         if (savedConfig != null)
           sftpProvider.overrideWith(
-            (_) => SftpNotifier(initialConfig: savedConfig),
+            (ref) => SftpNotifier(
+              initialConfig: savedConfig,
+              sftpService: ref.watch(sftpServiceProvider),
+              secureStorage: ref.watch(secureStorageProvider),
+            ),
           ),
       ],
       child: const FastCullingApp(),
