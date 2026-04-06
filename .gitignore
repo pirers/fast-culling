@@ -45,3 +45,8 @@ app.*.map.json
 # Generated files
 *.g.dart
 *.freezed.dart
+
+# Flutter Windows ephemeral build outputs (created by flutter assemble / flutter run).
+# These are SDK-generated files that must not be committed and must not be
+# deleted by `git clean -fd` between builds.
+windows/flutter/ephemeral/
