@@ -61,8 +61,18 @@ include(flutter/generated_plugins.cmake)
 # run in place. This is done instead of making a separate bundle (as on macOS)
 # so that building and running from within Visual Studio is easy.
 set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
-# Make the "install" step default to not running.
-set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY true)
+
+# Ensure the install prefix is a writable directory when not set explicitly by
+# the Flutter tool (which would otherwise default to C:\Program Files\...).
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  if(IS_MULTICONFIG)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/runner"
+      CACHE PATH "Install location for the application bundle" FORCE)
+  else()
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/runner/${CMAKE_BUILD_TYPE}"
+      CACHE PATH "Install location for the application bundle" FORCE)
+  endif()
+endif()
 
 if(INSTALL_BUNDLE_DATA_DIR)
   install(CODE "

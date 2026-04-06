@@ -95,6 +95,14 @@ flutter run -d windows
 flutter devices
 ```
 
+> **Windows dev-build note:** During a debug run (`flutter run -d windows`) the
+> app bundle is assembled into `build\windows\x64\runner\Debug\` (or `runner\`
+> for multi-config generators when no prefix is specified).  No administrative
+> privileges are required — the CMake install step no longer defaults to
+> `C:\Program Files\`.  If you invoke CMake directly (without the Flutter tool),
+> the install prefix falls back to a writable subdirectory under the build
+> output directory.
+
 ---
 
 ## Building a release
